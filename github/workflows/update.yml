@@ -1,0 +1,55 @@
+name: Update sources
+
+# Run on push and 4 times per day
+on:
+  schedule:
+    - cron: 0 0,6,12,18 * * *
+#   push:
+#     branches: [ master ]
+#     paths: [ source/source.json, source/generate.py, .github/workflows/update.yml ]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Install packages
+      run: |
+        echo deb http://deb.debian.org/debian stable main contrib non-free >> /etc/apt/sources.list
+        sudo apt-get update
+        sudo apt-get install python3-pip -y
+        pip3 install -r source/requirements.txt
+
+    - name: Delete old pages and QRs
+      run: rm -rf docs/_3ds/* docs/_ds/* docs/assets/images/qr/*.png docs/assets/images/qr/nightly/*.png docs/assets/images/qr/prerelease/*.png
+
+    - name: Run generate.py
+      run: |
+        export PATH=$PATH:/opt/devkitpro/tools/bin
+        cd source
+        python3 generate.py ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Pull origin
+      run: git pull origin master --ff-only # Pull origin in case a commit has been done while updating
+
+    - name: Push changes
+      run: |
+        git config user.email "flamekat54@aol.com"
+        git config user.name "TWLBot"
+
+        echo "machine github.com" > "$HOME/.netrc"
+        echo "  login TWLBot" >> "$HOME/.netrc"
+        echo "  password ${{ secrets.GITHUB_TOKEN }}" >> "$HOME/.netrc"
+
+        echo "machine api.github.com" >> "$HOME/.netrc"
+        echo "  login TWLBot" >> "$HOME/.netrc"
+        echo "  password ${{ secrets.GITHUB_TOKEN }}" >> "$HOME/.netrc"
+
+        git checkout master
+        git stage .
+        if git commit -m "Update sources"; then
+          git push origin master
+        fi
